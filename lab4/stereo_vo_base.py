@@ -119,18 +119,104 @@ class VisualOdometry:
         r = np.array([0,0,0])
         # feature in right img (without filtering)
         f_r_prev, f_r_cur = features_coor[:,2:4], features_coor[:,6:8]
+        f_l_prev, f_l_cur = features_coor[:,0:2], features_coor[:,4:6]
         # ------------- start your code here -------------- #
         
+        pb = self.stereo_inverse(f_l_cur, f_r_cur)
+        pa = self.stereo_inverse(f_l_prev, f_r_prev)
         
+        pa_filt, pb_filt, f_r_prev_filt, f_r_cur_filt = self.RANSAC(pa, pb, f_r_prev, f_r_cur)
         
-        
-        
-        
-        
-        # replace (1) the dummy C and r to the estimated C and r. 
-        #         (2) the original features to the filtered features
-        return C, r, f_r_prev, f_r_cur
+        C, r, _ = self.align_points(pa_filt, pb_filt)
+        r = -C@r
+
+        return C, r, f_r_prev_filt, f_r_cur_filt
     
+    def stereo_inverse(self, f_l, f_r):
+        """
+        Computes 3D landmarks from stereo correspondences using vectorized operations.
+        
+        :params f_l: (N, 2) array of feature coordinates in the left image
+        :params f_r: (N, 2) array of feature coordinates in the right image
+        
+        :returns: (3, N) array of 3D landmark coordinates
+        """
+        b, fx, fy, cx, cy = self.cam.baseline, self.cam.fx, self.cam.fy, self.cam.cu, self.cam.cv
+
+        # Compute disparity (difference in x-coordinates between left and right cameras)
+        disparity = f_l[:, 0] - f_r[:, 0]  # (N,)
+        
+        # Avoid division by zero (handle invalid matches)
+        mask = disparity != 0
+        disparity = np.where(mask, disparity, 1e-6)  # Small value to prevent division error
+
+        # Compute depth Z
+        Z = fx * b / disparity  # (N,)
+
+        # Compute X and Y coordinates
+        X = Z * (0.5 * (f_l[:, 0] + f_r[:, 0]) - cx) / fx
+        Y = Z * (0.5 * (f_l[:, 1] + f_r[:, 1]) - cy) / fy
+
+        # Stack into a (3xN) matrix
+        landmarks = np.vstack((X, Y, Z))  # Shape: (3, N)
+        return landmarks
+    
+    def RANSAC(self, pa, pb, f_r_prev, f_r_curr, inlier_range=2, trials=500):
+        max_inliers = 0
+        best_inliers = None
+        
+        for _ in range(trials):
+            
+            # randomly select 3 points
+            idx = np.random.choice(np.arange(pa.shape[1]), 3, replace=False)
+            
+            # extract the 3 points
+            pa_sample = np.concatenate([pa[:,idx[0]],pa[:,idx[1]],pa[:,idx[2]]]).reshape(3,3).T
+            pb_sample = np.concatenate([pb[:,idx[0]],pb[:,idx[1]],pb[:,idx[2]]]).reshape(3,3).T
+            
+            # estimate the transformation
+            C, r, status = self.align_points(pa_sample, pb_sample)
+            if not status:
+                continue
+            
+            # apply the transformation to all points
+            pb_est = C@pa + r
+            
+            # compute the distance between the estimated points and the actual points
+            dist = np.linalg.norm(pb - pb_est, axis=0)
+            
+            # find inliers
+            inliers = dist < inlier_range
+            num_inliers = np.sum(inliers)
+            
+            # update the best inlier if necessary
+            if num_inliers > max_inliers:
+                max_inliers = num_inliers
+                best_inliers = inliers
+                
+        if best_inliers is None:
+            return pa, pb, f_r_prev, f_r_curr
+        
+        return pa[:, best_inliers], pb[:, best_inliers], f_r_prev[best_inliers, :], f_r_curr[best_inliers, :]
+                    
+
+    def align_points(self, pa, pb):
+        p_a = np.mean(pa, axis = 1).reshape(3,1)
+        p_b = np.mean(pb, axis = 1).reshape(3,1)
+        w = pa.shape[1]
+        W_ba = (1/w)*(pb - p_b)@(pa - p_a).T
+        V, _, Ut = np.linalg.svd(W_ba)
+        C = V@np.array([[1,0,0],[0,1,0],[0,0,np.linalg.det(Ut.T)*np.linalg.det(V)]])@Ut
+        
+        if np.round(np.linalg.det(C)) == 1:
+            status = True
+        else:
+            status = False
+        
+        r = -C.T@p_b + p_a
+
+        return C, r, status
+        
     def processFirstFrame(self, img_left, img_right):
         kp_l, des_l, feature_l_img = self.feature_detection(img_left)
         kp_r, des_r, feature_r_img = self.feature_detection(img_right)
