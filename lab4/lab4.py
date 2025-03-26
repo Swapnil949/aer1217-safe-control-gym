@@ -132,7 +132,18 @@ def main():
     ax_t.legend()
     ax_t.set_zlim3d(-20.0, 25.0)
     plt.title(r"Trajectory of the vehicle", fontsize=13, fontweight=0, color='black', style='italic', y=1.02 )
-    plt.show()
+    plt.savefig('trajectory_3d.png', dpi=300)
+    
+    # Plot only x and y
+    fig_xy = plt.figure(facecolor = "white")
+    ax_xy = fig_xy.add_subplot(111)
+    ax_xy.plot(cam_center_gt[:,0], cam_center_gt[:,1], color='red',label='ground truth trajectory', linewidth=1.9, alpha=0.9)
+    ax_xy.plot(T_vehicle[:,0,3],T_vehicle[:,1,3],color='steelblue',label='VO trajectory',linewidth=1.9, alpha=0.9)
+    ax_xy.set_xlabel(r'X [m]')
+    ax_xy.set_ylabel(r'Y [m]')
+    ax_xy.legend()
+    plt.title(r"Trajectory of the vehicle", fontsize=13, fontweight=0, color='black', style='italic', y=1.02 )
+    plt.savefig('trajectory_xy.png', dpi=300)
 
 if __name__ == '__main__':
     print('We are using OpenCV version {}'.format(cv.__version__))
