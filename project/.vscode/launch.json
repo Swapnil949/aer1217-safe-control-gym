@@ -1,0 +1,14 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Debug final_project.py",
+        "type": "debugpy",
+        "request": "launch",
+        "program": "${workspaceFolder}/final_project.py",
+        "args": ["--overrides", "./getting_started.yaml"],
+        "console": "integratedTerminal",
+        "justMyCode": false
+      }
+    ]
+  }

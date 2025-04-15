@@ -31,7 +31,7 @@ import numpy as np
 from collections import deque
 
 try:
-    from project_utils import Command, PIDController, timing_step, timing_ep, plot_trajectory, draw_trajectory
+    from project_utils import Command, PIDController, timing_step, timing_ep, plot_trajectory, draw_trajectory, plot_map, plot_full_map_and_trajectory_2d
 except ImportError:
     # PyTest import.
     from .project_utils import Command, PIDController, timing_step, timing_ep, plot_trajectory, draw_trajectory
@@ -44,6 +44,7 @@ except ImportError:
 # Please refrain from importing large or unstable 3rd party packages.
 try:
     import example_custom_utils as ecu
+    import matplotlib.pyplot as plt
 except ImportError:
     # PyTest import.
     from . import example_custom_utils as ecu
@@ -112,8 +113,14 @@ class Controller():
         t_scaled = self.planning(use_firmware, initial_info)
 
         ## visualization
+        
+        # Plot the map of the environment.
+        plot_map(self.NOMINAL_GATES, self.NOMINAL_OBSTACLES)
+        
         # Plot trajectory in each dimension and 3D.
         plot_trajectory(t_scaled, self.waypoints, self.ref_x, self.ref_y, self.ref_z)
+        
+        plot_full_map_and_trajectory_2d(self.NOMINAL_GATES, self.NOMINAL_OBSTACLES, self.waypoints, self.ref_x, self.ref_y)
 
         # Draw the trajectory on PyBullet's GUI.
         draw_trajectory(initial_info, self.waypoints, self.ref_x, self.ref_y, self.ref_z)
