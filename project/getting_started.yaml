@@ -50,18 +50,18 @@ quadrotor_config:
   # type (0: `tall` obstacle, 1: `low` obstacle)
   # NOTE: please do not modify the sequence of the original gates and obstacles defined below
   gates:
-    [   # x, y, z, r, p, y, type 
-        [ 0.5, -2.5, 0, 0, 0, -1.57, 0],      # gate 1
-        [ 2.0, -1.5, 0, 0, 0, 0,     0],      # gate 2
-        [ 0.0,  0.2, 0, 0, 0, 1.57,  0],      # gate 3
-        [-0.5,  1.5, 0, 0, 0, 0,     0]       # gate 4
+    [  # x, y, z, r, p, y, type 
+      [ 0.5, -2.5, 0, 0, 0, -1.57, 0],      # gate 1
+      [ 2.0, -1.5, 0, 0, 0, 0,     0],      # gate 2
+      [ 0.0,  0.2, 0, 0, 0, 1.57,  0],      # gate 3
+      [-0.5,  1.5, 0, 0, 0, 0,     0]       # gate 4
     ]
   obstacles:
-    [   # x, y, z, r, p, y
-        [ 1.5, -2.5, 0, 0, 0, 0],             # obstacle 1
-        [ 0.5, -1.0, 0, 0, 0, 0],             # obstacle 2
-        [ 1.5,    0, 0, 0, 0, 0],             # obstacle 3
-        [-1.0,    0, 0, 0, 0, 0]              # obstacle 4
+    [  # x, y, z, r, p, y
+      [ 1.5, -2.5, 0, 0, 0, 0],             # obstacle 1
+      [ 0.5, -1.0, 0, 0, 0, 0],             # obstacle 2
+      [ 1.5,    0, 0, 0, 0, 0],             # obstacle 3
+      [-1.0,    0, 0, 0, 0, 0]              # obstacle 4
     ]
 
   # Randomization of the initial state

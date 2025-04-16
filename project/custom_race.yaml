@@ -1,0 +1,77 @@
+num_episodes: 1
+use_firmware: True
+verbose: False
+
+quadrotor_config:
+  seed: 42
+  reseed_on_reset: True
+  gui: True
+  camera_view: [5, -40, -40, 0.5, -1, 0.5]
+  ctrl_freq: 30
+  pyb_freq: 500
+  episode_len_sec: 100
+  done_on_violation: False
+  done_on_completion: False
+  done_on_collision: True
+  cost: competition
+
+  task: stabilization
+  task_info:
+    stabilization_goal: [2.0, 0.0, 1.0]
+    stabilization_goal_tolerance: 0.15
+
+  init_state:
+    init_x: -2.5
+    init_y: 2.5
+    init_z: 0.03
+    init_x_dot: 0
+    init_y_dot: 0
+    init_z_dot: 0
+    init_phi: 0
+    init_theta: 0
+    init_psi: 0
+    init_p: 0
+    init_q: 0
+    init_r: 0
+
+  gates:
+    [
+      [ -2.0, 2.0, 0, 0, 0, 0.0, 0],       # Gate 1
+      [ -1.0, 0.0, 0, 0, 0, 0.78, 0],      # Gate 2
+      [  0.0, 2.0, 0, 0, 0, -0.78, 0],     # Gate 3
+      [  1.0, 0.0, 0, 0, 0, 0.78, 0],      # Gate 4
+      [  2.0, 2.0, 0, 0, 0, -0.78, 0],     # Gate 5
+      [  2.0, 0.0, 0, 0, 0, 1.57, 0]       # Gate 6 (final)
+    ]
+
+  obstacles:
+    [
+      [ -0.5, 1.0, 0, 0, 0, 0],
+      [  1.5, 1.0, 0, 0, 0, 0]
+    ]
+
+  randomized_init: False
+  randomized_gates_and_obstacles: False
+
+  constraints:
+    - constraint_form: default_constraint
+      constrained_variable: input
+    - constraint_form: bounded_constraint
+      constrained_variable: state
+      active_dims: [0, 2, 4]
+      upper_bounds: [3.5, 3.5, 2.0]
+      lower_bounds: [-3.5, -3.5, -0.1]
+
+  disturbances:
+    action:
+      - disturbance_func: white_noise
+        std: 0.001
+    dynamics:
+      - disturbance_func: uniform
+        low: [-0.1, -0.1, -0.1]
+        high: [0.1, 0.1, 0.1]
+
+  quad_type: 3
+  info_in_reset: True
+  normalized_rl_action_space: False
+  done_on_out_of_bound: False

@@ -3,7 +3,7 @@ from scipy.interpolate import CubicSpline
 from scipy.spatial import KDTree
 import heapq
 
-# A* algorithm 
+# A* algorithm (grid-based)
 def a_star(grid, start, goal):
     rows, cols = grid.shape
     open_set = []
@@ -36,7 +36,7 @@ def a_star(grid, start, goal):
                     f_score = tentative_g + heuristic(neighbor, goal)
                     heapq.heappush(open_set, (f_score, neighbor))
 
-    return []
+    return []  # No path found
 
 # Grid builder with obstacles and margin
 def build_grid(x_bounds, y_bounds, resolution=0.1, obstacles=[], margin=0.3):
@@ -56,28 +56,31 @@ def build_grid(x_bounds, y_bounds, resolution=0.1, obstacles=[], margin=0.3):
                     grid[i, j] = 1
     return grid, x_min, y_min, resolution
 
+# Final trajectory generator using enforced gate centers + spline
 
-
-def generate_minimal_gate_path(start, goal, gates, obstacles, ctrl_freq=30, duration=20):
+def generate_final_gate_spline_trajectory(start, goal, gates, obstacles, ctrl_freq=30, duration=20):
     z_height = 1.0
-    waypoints_2d = [start[:2]] + gates + [goal[:2]]
-    grid, x0, y0, res = build_grid(x_bounds=(-3.5, 3.5), y_bounds=(-3.5, 3.5),
-                                   resolution=0.1, obstacles=obstacles, margin=0.4)
+    waypoints = [start[:2]] + gates + [goal[:2]]
 
-    final_waypoints = []
-    for i in range(len(waypoints_2d) - 1):
-        sx, sy = waypoints_2d[i]
-        gx, gy = waypoints_2d[i + 1]
-        start_cell = (int((sx - x0) / res), int((sy - y0) / res))
-        goal_cell = (int((gx - x0) / res), int((gy - y0) / res))
-        path = a_star(grid, start_cell, goal_cell)
-        if not path:
-            raise ValueError(f"A* failed between {waypoints_2d[i]} and {waypoints_2d[i+1]}")
-        final_waypoints.append(waypoints_2d[i])
-    final_waypoints.append(waypoints_2d[-1])
+    # Optional: enforce obstacle clearance (remove gates near obstacles)
+    tree = KDTree(obstacles)
+    safe_waypoints = []
+    margin = 0.5
 
-    # Now spline through just these major waypoints
-    full_path_3d = np.column_stack([final_waypoints, np.full(len(final_waypoints), z_height)])
+    for wp in waypoints:
+        d, _ = tree.query(wp, k=1)
+        if d >= margin:
+            safe_waypoints.append(wp)
+        else:
+            print(f"[WARNING] Skipping waypoint {wp} too close to obstacle")
+
+    if safe_waypoints[0] != list(start[:2]):
+        safe_waypoints.insert(0, list(start[:2]))
+    if safe_waypoints[-1] != list(goal[:2]):
+        safe_waypoints.append(list(goal[:2]))
+
+    full_path_3d = np.column_stack([safe_waypoints, np.full(len(safe_waypoints), z_height)])
+
     t = np.linspace(0, 1, full_path_3d.shape[0])
     cs_x = CubicSpline(t, full_path_3d[:, 0])
     cs_y = CubicSpline(t, full_path_3d[:, 1])
@@ -89,22 +92,3 @@ def generate_minimal_gate_path(start, goal, gates, obstacles, ctrl_freq=30, dura
     ref_z = cs_z(t_scaled)
 
     return ref_x, ref_y, ref_z, full_path_3d
-
-def simplify_path(path, angle_threshold=5):
-    if len(path) <= 2:
-        return path
-
-    def angle(p1, p2, p3):
-        a, b, c = np.array(p1), np.array(p2), np.array(p3)
-        ba = a - b
-        bc = c - b
-        cos_angle = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc) + 1e-6)
-        return np.degrees(np.arccos(np.clip(cos_angle, -1.0, 1.0)))
-
-    simplified = [path[0]]
-    for i in range(1, len(path) - 1):
-        a = angle(path[i - 1], path[i], path[i + 1])
-        if abs(a - 180) > angle_threshold:
-            simplified.append(path[i])
-    simplified.append(path[-1])
-    return simplified

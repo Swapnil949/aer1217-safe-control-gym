@@ -31,7 +31,7 @@ import numpy as np
 from collections import deque
 
 try:
-    from project_utils import Command, PIDController, timing_step, timing_ep, plot_trajectory, draw_trajectory, plot_map, plot_full_map_and_trajectory_2d
+    from project_utils import Command, PIDController, timing_step, timing_ep, plot_trajectory, draw_trajectory
 except ImportError:
     # PyTest import.
     from .project_utils import Command, PIDController, timing_step, timing_ep, plot_trajectory, draw_trajectory
@@ -44,14 +44,56 @@ except ImportError:
 # Please refrain from importing large or unstable 3rd party packages.
 try:
     import example_custom_utils as ecu
-    import matplotlib.pyplot as plt
 except ImportError:
     # PyTest import.
     from . import example_custom_utils as ecu
 
+from example_custom_utils import generate_minimal_gate_path, simplify_path
+from pso_path_planner import generate_final_gate_spline_trajectory 
+from rrt_star_path_planner import (
+    plan_rrt_through_gates,
+    simplify_path,
+    force_gates
+)
+from minimum_snap_optimizer import generate_minimum_snap_trajectory
+import matplotlib.pyplot as plt
+
+
+from scipy.interpolate import CubicSpline
 #########################
 # REPLACE THIS (END) ####
 #########################
+
+def plot_debug_path(rrt_path, ref_x, ref_y, gates=None, obstacles=None):
+        rrt_path = np.array(rrt_path)
+
+        plt.figure(figsize=(8, 6))
+
+        # RRT waypoints (before smoothing)
+        if len(rrt_path) > 0:
+            plt.plot(rrt_path[:, 0], rrt_path[:, 1], 'ko--', label='RRT* Waypoints')
+
+        # Smoothed trajectory (final path)
+        plt.plot(ref_x, ref_y, 'b-', linewidth=2, label='Minimum Snap Path')
+
+        # Gates
+        if gates:
+            gx, gy = zip(*gates)
+            plt.scatter(gx, gy, c='green', s=80, marker='s', label='Gates')
+
+        # Obstacles
+        if obstacles:
+            ox, oy = zip(*obstacles)
+            plt.scatter(ox, oy, c='red', s=80, marker='x', label='Obstacles')
+
+        plt.xlabel('X [m]')
+        plt.ylabel('Y [m]')
+        plt.title('Planned Path with Gates and Obstacles')
+        plt.grid(True)
+        plt.axis("equal")
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
 
 class Controller():
     """Template controller class.
@@ -113,62 +155,76 @@ class Controller():
         t_scaled = self.planning(use_firmware, initial_info)
 
         ## visualization
-        
-        # Plot the map of the environment.
-        plot_map(self.NOMINAL_GATES, self.NOMINAL_OBSTACLES)
-        
         # Plot trajectory in each dimension and 3D.
         plot_trajectory(t_scaled, self.waypoints, self.ref_x, self.ref_y, self.ref_z)
-        
-        plot_full_map_and_trajectory_2d(self.NOMINAL_GATES, self.NOMINAL_OBSTACLES, self.waypoints, self.ref_x, self.ref_y)
 
         # Draw the trajectory on PyBullet's GUI.
         draw_trajectory(initial_info, self.waypoints, self.ref_x, self.ref_y, self.ref_z)
 
+    
 
+    # def planning(self, use_firmware, initial_info):
+    
+    #     start = np.array([self.initial_obs[0], self.initial_obs[2], 1.0])
+    #     goal = np.array(initial_info["x_reference"])[[0, 2, 4]]
+    #     gates = [(g[0], g[1]) for g in self.NOMINAL_GATES]
+    #     obstacles = [(o[0], o[1]) for o in self.NOMINAL_OBSTACLES]
+
+        
+    #     self.ref_x, self.ref_y, self.ref_z, self.waypoints = generate_minimal_gate_path(
+    #         start=start,
+    #         goal=goal,
+    #         gates=gates,
+    #         obstacles=obstacles,
+    #         ctrl_freq=self.CTRL_FREQ,
+    #         duration=20
+    #     )
+
+        
+    #     descend_steps = int(2 * self.CTRL_FREQ)
+    #     end_idx = len(self.ref_z)
+    #     if end_idx > descend_steps:
+    #         z_start = self.ref_z[-descend_steps]
+    #         self.ref_z[-descend_steps:] = np.linspace(z_start, 0.0, descend_steps)
+
+        
+    #     for _ in range(int(3 * self.CTRL_FREQ)):  # 3 seconds of stationary
+    #         self.ref_x = np.append(self.ref_x, self.ref_x[-1])
+    #         self.ref_y = np.append(self.ref_y, self.ref_y[-1])
+    #         self.ref_z = np.append(self.ref_z, self.ref_z[-1])
+
+    #     return np.linspace(0, 1, len(self.ref_x))
     def planning(self, use_firmware, initial_info):
-        """Trajectory planning algorithm"""
-        #########################
-        # REPLACE THIS (START) ##
-        #########################
-        ## generate waypoints for planning
+        start = (self.initial_obs[0], self.initial_obs[2])
+        goal = tuple(initial_info["x_reference"][[0, 2]])
+        gates = [(g[0], g[1]) for g in self.NOMINAL_GATES]
+        obstacles = [(o[0], o[1]) for o in self.NOMINAL_OBSTACLES]
+        bounds = (-3.5, 3.5, -3.5, 3.5)
 
-        # Call a function in module `example_custom_utils`.
-        ecu.exampleFunction()
+        # 1. Generate safe gate-to-gate transitions
+        path_2d, _ = plan_rrt_through_gates(start, gates, goal, obstacles, bounds)
 
-        # initial waypoint
-        if use_firmware:
-            waypoints = [(self.initial_obs[0], self.initial_obs[2], initial_info["gate_dimensions"]["tall"]["height"])]  # Height is hardcoded scenario knowledge.
-        else:
-            waypoints = [(self.initial_obs[0], self.initial_obs[2], self.initial_obs[4])]
+        # 2. Clean up path
+        path_2d = simplify_path(path_2d, angle_threshold=15)
 
-        # Example code: hardcode waypoints 
-        waypoints.append((-0.5, -3.0, 2.0))
-        waypoints.append((-0.5, -2.0, 2.0))
-        waypoints.append((-0.5, -1.0, 2.0))
-        waypoints.append((-0.5,  0.0, 2.0))
-        waypoints.append((-0.5,  1.0, 2.0))
-        waypoints.append((-0.5,  2.0, 2.0))
-        waypoints.append([initial_info["x_reference"][0], initial_info["x_reference"][2], initial_info["x_reference"][4]])
+        # 3. Force gate centers into path (if not already)
+        path_2d = force_gates(path_2d, gates)
 
-        # Polynomial fit.
-        self.waypoints = np.array(waypoints)
-        deg = 6
-        t = np.arange(self.waypoints.shape[0])
-        fx = np.poly1d(np.polyfit(t, self.waypoints[:,0], deg))
-        fy = np.poly1d(np.polyfit(t, self.waypoints[:,1], deg))
-        fz = np.poly1d(np.polyfit(t, self.waypoints[:,2], deg))
-        duration = 15
-        t_scaled = np.linspace(t[0], t[-1], int(duration*self.CTRL_FREQ))
-        self.ref_x = fx(t_scaled)
-        self.ref_y = fy(t_scaled)
-        self.ref_z = fz(t_scaled)
+        # 4. Generate minimum snap trajectory through these critical waypoints
+        self.ref_x, self.ref_y, t_scaled = generate_minimum_snap_trajectory(
+            path_2d,
+            total_time=20,
+            ctrl_freq=self.CTRL_FREQ
+        )
+        self.ref_z = np.full_like(self.ref_x, 1.0)
 
-        #########################
-        # REPLACE THIS (END) ####
-        #########################
+        # Final reference for controller
+        self.waypoints = np.array([(x, y, 1.0) for x, y in path_2d])
+
+        plot_debug_path(path_2d, self.ref_x, self.ref_y, gates=gates, obstacles=obstacles)
 
         return t_scaled
+
 
     def cmdFirmware(self,
                     time,
@@ -212,62 +268,39 @@ class Controller():
         # print(self.NOMINAL_GATES)
 
         if iteration == 0:
-            height = 1
-            duration = 2
+            command_type = Command(2)  # Takeoff
+            args = [1.0, 2.0]
 
-            command_type = Command(2)  # Take-off.
-            args = [height, duration]
+        elif 3 * self.CTRL_FREQ <= iteration < 23 * self.CTRL_FREQ:
+            step = min(iteration - 3 * self.CTRL_FREQ, len(self.ref_x) - 1)
+            pos = [self.ref_x[step], self.ref_y[step], self.ref_z[step]]
+            command_type = Command(1)  # cmdFullState
+            args = [pos, np.zeros(3), np.zeros(3), 0.0, np.zeros(3)]
 
-        # [INSTRUCTIONS] Example code for using cmdFullState interface   
-        elif iteration >= 3*self.CTRL_FREQ and iteration < 20*self.CTRL_FREQ:
-            step = min(iteration-3*self.CTRL_FREQ, len(self.ref_x) -1)
-            target_pos = np.array([self.ref_x[step], self.ref_y[step], self.ref_z[step]])
-            target_vel = np.zeros(3)
-            target_acc = np.zeros(3)
-            target_yaw = 0.
-            target_rpy_rates = np.zeros(3)
-
-            command_type = Command(1)  # cmdFullState.
-            args = [target_pos, target_vel, target_acc, target_yaw, target_rpy_rates]
-
-        elif iteration == 20*self.CTRL_FREQ:
-            command_type = Command(6)  # Notify setpoint stop.
+        elif iteration == 23 * self.CTRL_FREQ:
+            command_type = Command(6)  # NotifySetpointStop
             args = []
 
-       # [INSTRUCTIONS] Example code for using goTo interface 
-        elif iteration == 20*self.CTRL_FREQ+1:
-            x = self.ref_x[-1]
-            y = self.ref_y[-1]
-            z = 1.5 
-            yaw = 0.
-            duration = 2.5
+        elif iteration == 23 * self.CTRL_FREQ + 1:
+            x, y, z = self.ref_x[-1], self.ref_y[-1], 1.5
+            command_type = Command(5)  # goTo
+            args = [[x, y, z], 0.0, 2.5, False]
 
-            command_type = Command(5)  # goTo.
-            args = [[x, y, z], yaw, duration, False]
+        elif iteration == 26 * self.CTRL_FREQ:
+            x, y = self.initial_obs[0], self.initial_obs[2]
+            command_type = Command(5)  # goTo back
+            args = [[x, y, 1.5], 0.0, 4, False]
 
-        elif iteration == 23*self.CTRL_FREQ:
-            x = self.initial_obs[0]
-            y = self.initial_obs[2]
-            z = 1.5
-            yaw = 0.
-            duration = 6
+        elif iteration == 30 * self.CTRL_FREQ:
+            command_type = Command(3)  # Land
+            args = [0.0, 3.0]
 
-            command_type = Command(5)  # goTo.
-            args = [[x, y, z], yaw, duration, False]
-
-        elif iteration == 30*self.CTRL_FREQ:
-            height = 0.
-            duration = 3
-
-            command_type = Command(3)  # Land.
-            args = [height, duration]
-
-        elif iteration == 33*self.CTRL_FREQ-1:
-            command_type = Command(4)  # STOP command to be sent once the trajectory is completed.
+        elif iteration == 33 * self.CTRL_FREQ - 1:
+            command_type = Command(4)  # STOP
             args = []
 
         else:
-            command_type = Command(0)  # None.
+            command_type = Command(0)  # None
             args = []
 
         #########################
@@ -345,3 +378,5 @@ class Controller():
         self.interstep_learning_time = 0
         self.interstep_learning_occurrences = 0
         self.interepisode_learning_time = 0
+
+    
