@@ -45,6 +45,8 @@ except ImportError:
 try:
     import example_custom_utils as ecu
     import matplotlib.pyplot as plt
+    from minimum_snap_optimizer import generate_minimum_snap_trajectory
+    from scipy.interpolate import CubicSpline
 except ImportError:
     # PyTest import.
     from . import example_custom_utils as ecu
@@ -115,12 +117,12 @@ class Controller():
         ## visualization
         
         # Plot the map of the environment.
-        plot_map(self.NOMINAL_GATES, self.NOMINAL_OBSTACLES)
+        # plot_map(self.NOMINAL_GATES, self.NOMINAL_OBSTACLES)
         
         # Plot trajectory in each dimension and 3D.
-        plot_trajectory(t_scaled, self.waypoints, self.ref_x, self.ref_y, self.ref_z)
+        # plot_trajectory(t_scaled, self.waypoints, self.ref_x, self.ref_y, self.ref_z)
         
-        plot_full_map_and_trajectory_2d(self.NOMINAL_GATES, self.NOMINAL_OBSTACLES, self.waypoints, self.ref_x, self.ref_y)
+       # plot_full_map_and_trajectory_2d(self.NOMINAL_GATES, self.NOMINAL_OBSTACLES, self.waypoints, self.ref_x, self.ref_y)
 
         # Draw the trajectory on PyBullet's GUI.
         draw_trajectory(initial_info, self.waypoints, self.ref_x, self.ref_y, self.ref_z)
@@ -142,33 +144,21 @@ class Controller():
         else:
             waypoints = [(self.initial_obs[0], self.initial_obs[2], self.initial_obs[4])]
 
-        # Example code: hardcode waypoints 
-        waypoints.append((-0.5, -3.0, 2.0))
-        waypoints.append((-0.5, -2.0, 2.0))
-        waypoints.append((-0.5, -1.0, 2.0))
-        waypoints.append((-0.5,  0.0, 2.0))
-        waypoints.append((-0.5,  1.0, 2.0))
-        waypoints.append((-0.5,  2.0, 2.0))
-        waypoints.append([initial_info["x_reference"][0], initial_info["x_reference"][2], initial_info["x_reference"][4]])
-
-        # Polynomial fit.
-        self.waypoints = np.array(waypoints)
-        deg = 6
-        t = np.arange(self.waypoints.shape[0])
-        fx = np.poly1d(np.polyfit(t, self.waypoints[:,0], deg))
-        fy = np.poly1d(np.polyfit(t, self.waypoints[:,1], deg))
-        fz = np.poly1d(np.polyfit(t, self.waypoints[:,2], deg))
-        duration = 15
-        t_scaled = np.linspace(t[0], t[-1], int(duration*self.CTRL_FREQ))
-        self.ref_x = fx(t_scaled)
-        self.ref_y = fy(t_scaled)
-        self.ref_z = fz(t_scaled)
+        START = [-1.0, -3.0, 0]
+        END = [-0.5, 2.0, 1.0]
+        
+        path = ecu.get_path(START, END, self.NOMINAL_OBSTACLES, self.NOMINAL_GATES) 
+        
+        self.ref_x = path[:, 0]
+        self.ref_y = path[:, 1]
+        self.ref_z = path[:, 2]
+        self.waypoints = path
+        
 
         #########################
         # REPLACE THIS (END) ####
         #########################
-
-        return t_scaled
+        return np.linspace(0, len(self.ref_x) * self.CTRL_TIMESTEP, len(self.ref_x))
 
     def cmdFirmware(self,
                     time,
