@@ -23,215 +23,196 @@ def generateCircle(radius, start_point, num_points):
     return np.column_stack((x, y, z))
 
 
-STEP_SIZE = 0.2
-SEARCH_RADIUS = 0.5
-MAX_ITER = 1000
-SQUARE_OBS_HALF_SIZE = 0.1  # Half of 12cm
-GATE_WIDTH = 0.40  # 40 cm gate width
+def augment_waypoints(gates): 
+    """
+    Based on yaw angle, add waypoint to front and back of each gate
+    """
+    
+    waypoints = []
+    dist = 0.25
+    
+    for i, gate in enumerate(gates):
+        x, y, _, _, _, yaw, _ = gate
+        dy = dist * np.cos(yaw)
+        dx = dist * np.sin(yaw)
+        
+        # add waypoint in front of gate
+        waypoints.append([x + dx, y + dy, yaw])
+        
+        # add gate center as waypoint
+        waypoints.append([x, y, yaw])
+        
+        # add waypoint behind gate
+        waypoints.append([x - dx, y - dy, yaw])
+    
+    return np.array(waypoints)
+
+def augment_obstacles(gates):
+    """
+    Based on yaw angle, add edges of the gates as obstacles
+    """
+    
+    obs = []
+    
+    for gate in gates:
+        x, y, _, _, _, yaw, _ = gate
+        
+        # calculate the endpoint of the gate edge
+        x1 = x + 0.3 * np.cos(yaw)
+        y1 = y + 0.3 * np.sin(yaw)
+        x2 = x - 0.3 * np.cos(yaw)
+        y2 = y - 0.3 * np.sin(yaw)
+        
+        # Add points to the obstacle list
+        obs.append([x1, y1, 0])
+        obs.append([x2, y2, 0])
+    return np.array(obs)
+
+import numpy as np
+import heapq
+
 
 class Node:
-    def __init__(self, pos):
-        self.pos = pos
-        self.parent = None
-        self.cost = 0.0
+    def __init__(self, position, cost, heuristic, parent=None):
+        self.position = position
+        self.cost = cost
+        self.heuristic = heuristic
+        self.parent = parent
 
-class RRTStar:
-    def __init__(self, x_range, y_range, obstacles, waypoints=None):
-        self.x_range = x_range
-        self.y_range = y_range
+    def __lt__(self, other):
+        return (self.cost + self.heuristic) < (other.cost + other.heuristic)
+
+
+class AStarPlanner:
+    def __init__(self, obstacles, resolution=0.1, obstacle_radius=0.3):
+        self.resolution = resolution
+        self.obstacle_radius = obstacle_radius
         self.obstacles = obstacles
-        if waypoints is None:
-            waypoints = []
-        self.waypoints = [w[:2] for w in waypoints]
-        self.nodes = []
 
-    def plan(self, start, goal):
-        self.nodes = [Node(start)]
-        path = [start]
-        for wp in self.waypoints:
-            path.extend(self.plan_between(path[-1], wp))
-        path.extend(self.plan_between(self.waypoints[-1], goal))
-        return path
-
-    def plan_between(self, start, goal):
-        temp_path = []
-        self.nodes = [Node(start)]
-        for _ in range(MAX_ITER):
-            rand_point = self.sample()
-            nearest_node = self.nearest(rand_point)
-            new_node = self.steer(nearest_node, rand_point)
-
-            if not self.collision_check(nearest_node.pos, new_node.pos):
-                neighbors = self.find_nearby_nodes(new_node)
-                min_cost_node = self.choose_best_parent(neighbors, nearest_node, new_node)
-                if min_cost_node:
-                    new_node.parent = min_cost_node
-                    new_node.cost = min_cost_node.cost + np.linalg.norm(np.array(new_node.pos) - np.array(min_cost_node.pos))
-                self.nodes.append(new_node)
-                self.rewire(new_node, neighbors)
-
-                if np.linalg.norm(np.array(new_node.pos) - np.array(goal)) < STEP_SIZE:
-                    final_node = Node(goal)
-                    final_node.parent = new_node
-                    final_node.cost = new_node.cost + np.linalg.norm(np.array(goal) - np.array(new_node.pos))
-                    self.nodes.append(final_node)
-                    temp_path = self.extract_path(final_node)
-                    break
-        return temp_path
-
-    def sample(self):
-        return [random.uniform(*self.x_range), random.uniform(*self.y_range)]
-
-    def nearest(self, point):
-        return min(self.nodes, key=lambda node: np.linalg.norm(np.array(node.pos) - np.array(point)))
-
-    def steer(self, from_node, to_point):
-        vec = np.array(to_point) - np.array(from_node.pos)
-        dist = np.linalg.norm(vec)
-        direction = vec / dist if dist != 0 else vec
-        new_pos = from_node.pos + STEP_SIZE * direction
-        new_node = Node(new_pos.tolist())
-        new_node.parent = from_node
-        new_node.cost = from_node.cost + STEP_SIZE
-        return new_node
-
-    def collision_check(self, p1, p2):
+    def is_collision(self, point):
         for obs in self.obstacles:
-            center = obs[:2]
-            min_x, max_x = center[0] - SQUARE_OBS_HALF_SIZE, center[0] + SQUARE_OBS_HALF_SIZE
-            min_y, max_y = center[1] - SQUARE_OBS_HALF_SIZE, center[1] + SQUARE_OBS_HALF_SIZE
-            if self.segment_intersects_box(p1, p2, min_x, max_x, min_y, max_y):
+            if np.linalg.norm(point - obs[:2]) <= self.obstacle_radius:
                 return True
         return False
 
-    def find_nearby_nodes(self, new_node):
-        radius = SEARCH_RADIUS
-        return [node for node in self.nodes if np.linalg.norm(np.array(node.pos) - np.array(new_node.pos)) < radius]
+    def get_neighbors(self, point):
+        directions = np.array([
+            [1, 0], [-1, 0], [0, 1], [0, -1],
+            [1, 1], [1, -1], [-1, 1], [-1, -1]
+        ])
+        neighbors = []
+        for d in directions:
+            neighbor = point + self.resolution * d
+            if not self.is_collision(neighbor):
+                neighbors.append(neighbor)
+        return neighbors
 
-    def choose_best_parent(self, neighbors, nearest_node, new_node):
-        min_cost = nearest_node.cost + np.linalg.norm(np.array(new_node.pos) - np.array(nearest_node.pos))
-        best_node = nearest_node
-        for node in neighbors:
-            cost = node.cost + np.linalg.norm(np.array(new_node.pos) - np.array(node.pos))
-            if cost < min_cost and not self.collision_check(node.pos, new_node.pos):
-                min_cost = cost
-                best_node = node
-        return best_node
+    def heuristic(self, a, b):
+        return np.linalg.norm(a - b)
 
-    def rewire(self, new_node, neighbors):
-        for node in neighbors:
-            cost = new_node.cost + np.linalg.norm(np.array(node.pos) - np.array(new_node.pos))
-            if cost < node.cost and not self.collision_check(new_node.pos, node.pos):
-                node.parent = new_node
-                node.cost = cost
+    def plan(self, start, goal):
+        start = np.round(start / self.resolution) * self.resolution
+        goal = np.round(goal / self.resolution) * self.resolution
 
-    def extract_path(self, node):
+        open_list = []
+        heapq.heappush(open_list, Node(start, 0.0, self.heuristic(start, goal)))
+        visited = {}
+
+        while open_list:
+            current = heapq.heappop(open_list)
+            c_pos = tuple(current.position.round(2))
+
+            if c_pos in visited:
+                continue
+            visited[c_pos] = current
+
+            if self.heuristic(current.position, goal) <= self.resolution:
+                return self.reconstruct_path(current)
+
+            for neighbor in self.get_neighbors(current.position):
+                n_pos = tuple(neighbor.round(2))
+                if n_pos in visited:
+                    continue
+                cost = current.cost + np.linalg.norm(neighbor - current.position)
+                heuristic = self.heuristic(neighbor, goal)
+                heapq.heappush(open_list, Node(neighbor, cost, heuristic, current))
+
+        return None  # No path found
+
+    def reconstruct_path(self, node):
         path = []
         while node:
-            path.append(node.pos)
+            path.append(node.position)
             node = node.parent
         return path[::-1]
 
-    @staticmethod
-    def segment_intersects_box(p1, p2, min_x, max_x, min_y, max_y):
-        x1, y1 = p1
-        x2, y2 = p2
+    def plan_through_waypoints(self, start, waypoints):
+        full_path = []
+        current_start = start
 
-        def clip(p, q, u1, u2):
-            if p == 0:
-                return q >= 0, u1, u2
-            u = q / p
-            if p < 0:
-                if u > u2: return False, u1, u2
-                if u > u1: u1 = u
+        for wp in waypoints:
+            path_segment = self.plan(current_start, wp[:2])
+            if path_segment is None:
+                print(f"Failed to reach waypoint {wp[:2]}")
+                return None
+            if full_path:
+                full_path.extend(path_segment[1:])  # skip duplicate
             else:
-                if u < u1: return False, u1, u2
-                if u < u2: u2 = u
-            return True, u1, u2
+                full_path.extend(path_segment)
+            current_start = wp[:2]
 
-        dx = x2 - x1
-        dy = y2 - y1
-        u1, u2 = 0.0, 1.0
+        return np.array(full_path)
 
-        for p, q in [(-dx, x1 - min_x), (dx, max_x - x1),
-                     (-dy, y1 - min_y), (dy, max_y - y1)]:
-            valid, u1, u2 = clip(p, q, u1, u2)
-            if not valid:
-                return False
-        return True
+def smooth_path_with_cubic_spline(path, num_points=300):
+    """
+    Smoothens a 3D path using cubic splines with arc-length parameterization.
 
+    Args:
+        path (np.ndarray): N x 3 array of waypoints (x, y, z).
+        num_points (int): Number of points to interpolate for the smooth path.
 
-def augment_obstacles(obstacles, gates):
-    obs = obstacles.copy()
-    for gate in gates:
-        x, y, _, _, _, yaw, _ = gate
-        x1 = x - (GATE_WIDTH / 2) - 0.02 * np.cos(yaw)
-        y1 = y - (GATE_WIDTH / 2) - 0.02 * np.sin(yaw)
-        x2 = x + (GATE_WIDTH / 2) + 0.02 * np.cos(yaw)
-        y2 = y + (GATE_WIDTH / 2) + 0.02 * np.sin(yaw)
-        obs = np.vstack((obs, [x1, y1, 0, 0, 0, 0]))
-        obs = np.vstack((obs, [x2, y2, 0, 0, 0, 0]))
-    return obs
+    Returns:
+        np.ndarray: Smoothed path with shape (num_points, 3)
+    """
+    if path.shape[0] < 2:
+        raise ValueError("Path must have at least 2 points to smooth.")
 
-def augment_waypoints(gates):
-    ways = []
-    dist = 0.3
-    for gate in gates:
-        x, y, z, r, p, yaw, gate_type = gate
-        if gate_type == 0:
-            ways.append([x + dist * np.sin(yaw), y + dist * np.cos(yaw), 0, 0, 0, yaw, 0])
-            ways.append([x, y, 0, 0, 0, yaw, 0])
-            ways.append([x - dist * np.sin(yaw), y - dist * np.cos(yaw), 0, 0, 0, yaw, 0])
-    return ways
+    # Compute arc-length parameter (cumulative distance)
+    distances = np.linalg.norm(np.diff(path, axis=0), axis=1)
+    s = np.concatenate(([0], np.cumsum(distances)))
 
-def smooth_cubic_spline(path, obstacles, num_points=500, step=0.01) -> np.ndarray:
-    def collision_free_segment(p1, p2):
-        p1 = np.array(p1)
-        p2 = np.array(p2)
-        num_checks = max(2, int(np.linalg.norm(p2 - p1) / step))
-        for i in range(num_checks + 1):
-            interp = p1 + (p2 - p1) * (i / num_checks)
-            for obs in obstacles:
-                cx, cy = obs[:2]
-                if (cx - SQUARE_OBS_HALF_SIZE <= interp[0] <= cx + SQUARE_OBS_HALF_SIZE and
-                    cy - SQUARE_OBS_HALF_SIZE <= interp[1] <= cy + SQUARE_OBS_HALF_SIZE):
-                    return False
-        return True
+    # Fit separate cubic splines for x(s), y(s), z(s)
+    cs_x = CubicSpline(s, path[:, 0])
+    cs_y = CubicSpline(s, path[:, 1])
+    #cs_z = CubicSpline(s, path[:, 2])
 
-    path = np.array(path)
-    if len(path) < 2:
-        return path
+    # Resample along the arc-length
+    s_new = np.linspace(0, s[-1], num_points)
+    x_new = cs_x(s_new)
+    y_new = cs_y(s_new)
+    # z_new = cs_z(s_new)
 
-    x = path[:, 0]
-    y = path[:, 1]
-    t = np.linspace(0, 1, len(path))
-    cs_x = CubicSpline(t, x)
-    cs_y = CubicSpline(t, y)
-    t_new = np.linspace(0, 1, num_points)
-    x_smooth = cs_x(t_new)
-    y_smooth = cs_y(t_new)
-    smooth_points = np.column_stack((x_smooth, y_smooth))
-
-    filtered = [smooth_points[0]]
-    for i in range(1, len(smooth_points)):
-        if collision_free_segment(filtered[-1], smooth_points[i]):
-            filtered.append(smooth_points[i])
-        else:
-            return None
-    return np.array(filtered)
+    smoothed_path = np.vstack((x_new, y_new)).T
+    return smoothed_path
 
 def get_path(start, goal, obstacles, gates):
-    obs = augment_obstacles(obstacles, gates)
-    obs = obs[:, :3]
+    obstacles = [o[:3] for o in obstacles]
     waypoints = augment_waypoints(gates)
-    rrt = RRTStar(x_range=(-3.5, 3.5), y_range=(-3.5, 3.5), obstacles=obs, waypoints=waypoints)
-    path = rrt.plan(start[:2], goal[:2])
-    while True:
-        smoothed_path = smooth_cubic_spline(path, obs)
-        if smoothed_path is not None:
-            break
-        else:
-            print("Smoothing failed, retrying...")
-            path = rrt.plan(start[:2], goal[:2])
-    smoothed_path = np.hstack((smoothed_path, np.ones((smoothed_path.shape[0], 1)) * 1))
-    return smoothed_path
+    obs = augment_obstacles(gates)
+    obstacles = np.vstack((obstacles, obs))
+    planner = AStarPlanner(obstacles, resolution=0.1, obstacle_radius=0.315)
+    
+    waypoints = np.vstack((start[:2], waypoints[:, :2], goal[:2]))
+    path = planner.plan_through_waypoints(start[:2], waypoints)
+    if path is None:
+        print("No path found")
+        return None
+    
+    # Smooth the path
+    path = smooth_path_with_cubic_spline(path, num_points=300)
+    
+    
+    # Add 1.0 as z coordinate to the path
+    path = np.hstack((path, np.ones((path.shape[0], 1))))
+    
+    return path 
