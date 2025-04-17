@@ -144,9 +144,9 @@ class Controller():
         else:
             waypoints = [(self.initial_obs[0], self.initial_obs[2], self.initial_obs[4])]
 
-        START = [-1.0, -3.0, 0]
-        END = [-0.5, 2.0, 1.0]
-        
+        START = np.array([-1.0, -3.0, 0])
+        END = np.array([-0.5, 2.0, 1.0])
+
         path = ecu.get_path(START, END, self.NOMINAL_OBSTACLES, self.NOMINAL_GATES) 
         
         self.ref_x = path[:, 0]
