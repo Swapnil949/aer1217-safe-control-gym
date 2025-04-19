@@ -31,7 +31,7 @@ import numpy as np
 from collections import deque
 
 try:
-    from project_utils import Command, PIDController, timing_step, timing_ep, plot_trajectory, draw_trajectory, plot_map, plot_full_map_and_trajectory_2d
+    from project_utils import Command, PIDController, timing_step, timing_ep, plot_trajectory, draw_trajectory
 except ImportError:
     # PyTest import.
     from .project_utils import Command, PIDController, timing_step, timing_ep, plot_trajectory, draw_trajectory
@@ -45,12 +45,12 @@ except ImportError:
 try:
     import example_custom_utils as ecu
     import matplotlib.pyplot as plt
-    from minimum_snap_optimizer import generate_minimum_snap_trajectory
     from scipy.interpolate import CubicSpline
 except ImportError:
     # PyTest import.
     from . import example_custom_utils as ecu
 
+FLIGHT_TIME = 25.0 # seconds
 #########################
 # REPLACE THIS (END) ####
 #########################
@@ -147,7 +147,7 @@ class Controller():
         START = np.array([-1.0, -3.0, 0])
         END = np.array([-0.5, 2.0, 1.0])
 
-        path = ecu.get_path(START, END, self.NOMINAL_OBSTACLES, self.NOMINAL_GATES) 
+        path = ecu.get_path(START, END, self.NOMINAL_OBSTACLES, self.NOMINAL_GATES, FLIGHT_TIME, self.CTRL_FREQ)
         
         self.ref_x = path[:, 0]
         self.ref_y = path[:, 1]
@@ -209,7 +209,7 @@ class Controller():
             args = [height, duration]
 
         # [INSTRUCTIONS] Example code for using cmdFullState interface   
-        elif iteration >= 3*self.CTRL_FREQ and iteration < 20*self.CTRL_FREQ:
+        elif iteration >= 3*self.CTRL_FREQ and iteration < (3 + FLIGHT_TIME)*self.CTRL_FREQ:
             step = min(iteration-3*self.CTRL_FREQ, len(self.ref_x) -1)
             target_pos = np.array([self.ref_x[step], self.ref_y[step], self.ref_z[step]])
             target_vel = np.zeros(3)
@@ -220,39 +220,18 @@ class Controller():
             command_type = Command(1)  # cmdFullState.
             args = [target_pos, target_vel, target_acc, target_yaw, target_rpy_rates]
 
-        elif iteration == 20*self.CTRL_FREQ:
+        elif iteration == (FLIGHT_TIME + 3)*self.CTRL_FREQ:
             command_type = Command(6)  # Notify setpoint stop.
             args = []
 
-       # [INSTRUCTIONS] Example code for using goTo interface 
-        elif iteration == 20*self.CTRL_FREQ+1:
-            x = self.ref_x[-1]
-            y = self.ref_y[-1]
-            z = 1.5 
-            yaw = 0.
-            duration = 2.5
-
-            command_type = Command(5)  # goTo.
-            args = [[x, y, z], yaw, duration, False]
-
-        elif iteration == 23*self.CTRL_FREQ:
-            x = self.initial_obs[0]
-            y = self.initial_obs[2]
-            z = 1.5
-            yaw = 0.
-            duration = 6
-
-            command_type = Command(5)  # goTo.
-            args = [[x, y, z], yaw, duration, False]
-
-        elif iteration == 30*self.CTRL_FREQ:
+        elif iteration == (FLIGHT_TIME + 13)*self.CTRL_FREQ:
             height = 0.
             duration = 3
 
             command_type = Command(3)  # Land.
             args = [height, duration]
 
-        elif iteration == 33*self.CTRL_FREQ-1:
+        elif iteration == (FLIGHT_TIME + 16)*self.CTRL_FREQ-1:
             command_type = Command(4)  # STOP command to be sent once the trajectory is completed.
             args = []
 
