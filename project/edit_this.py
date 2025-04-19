@@ -50,7 +50,7 @@ except ImportError:
     # PyTest import.
     from . import example_custom_utils as ecu
 
-FLIGHT_TIME = 25.0 # seconds
+FLIGHT_TIME = 40.0 # seconds
 #########################
 # REPLACE THIS (END) ####
 #########################
@@ -232,7 +232,7 @@ class Controller():
             command_type = Command(3)  # Land.
             args = [height, duration]
 
-        elif iteration == (FLIGHT_TIME + 7)*self.CTRL_FREQ-1:
+        elif iteration == (FLIGHT_TIME + 10)*self.CTRL_FREQ-1:
             command_type = Command(4)  # STOP command to be sent once the trajectory is completed.
             args = []
 

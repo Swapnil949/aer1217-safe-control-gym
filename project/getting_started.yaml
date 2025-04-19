@@ -46,7 +46,7 @@ quadrotor_config:
     init_r: 0
 
   # Nominal (pre-randomization) positions of gates and obstacles
-  # yaw: 1.57 rad --> 90 degree
+  # yaw: 1.57 rad --> 90 degree25
   # type (0: `tall` obstacle, 1: `low` obstacle)
   # NOTE: please do not modify the sequence of the original gates and obstacles defined below
   gates:
@@ -55,6 +55,7 @@ quadrotor_config:
         [ 2.0, -1.5, 0, 0, 0, 0,     0],      # gate 2
         [ 0.0,  0.5, 0, 0, 0, 1.57,  0],      # gate 3
         [-0.5,  1.5, 0, 0, 0, 0,     0]       # gate 4
+
     ]
   obstacles:
     [   # x, y, z, r, p, y
