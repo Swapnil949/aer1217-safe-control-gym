@@ -6,6 +6,7 @@ import numpy as np
 import random
 from scipy.interpolate import CubicSpline
 
+
 def exampleFunction():
     """Example of user-defined function."""
     x = -1
@@ -162,6 +163,114 @@ class AStarPlanner:
             current_start = wp[:2]
 
         return np.array(full_path)
+    
+class RRTStarPlanner:
+    def __init__(self, obstacles, x_limits, y_limits, resolution=0.1, obstacle_radius=0.25, max_iter=1000, step_size=0.5):
+        self.obstacles = np.array(obstacles)
+        self.x_limits = x_limits
+        self.y_limits = y_limits
+        self.resolution = resolution
+        self.obstacle_radius = obstacle_radius
+        self.max_iter = max_iter
+        self.step_size = step_size
+        self.nodes = []
+
+    class Node:
+        def __init__(self, position):
+            self.position = np.array(position)
+            self.parent = None
+            self.cost = 0.0
+
+    def is_collision(self, p1, p2=None):
+        if p2 is None:
+            for obs in self.obstacles:
+                if np.linalg.norm(p1[:2] - obs[:2]) <= self.obstacle_radius:
+                    return True
+            return False
+
+        steps = int(np.linalg.norm(p2 - p1) / self.resolution)
+        for i in range(steps + 1):
+            point = p1 + i / max(1, steps) * (p2 - p1)
+            if self.is_collision(point):
+                return True
+        return False
+
+    def get_nearest_node(self, position):
+        return min(self.nodes, key=lambda node: np.linalg.norm(node.position - position))
+
+    def get_near_nodes(self, new_node, radius=1.0):
+        return [node for node in self.nodes if np.linalg.norm(node.position - new_node.position) <= radius]
+
+    def rewire(self, new_node, near_nodes):
+        for node in near_nodes:
+            new_cost = new_node.cost + np.linalg.norm(new_node.position - node.position)
+            if new_cost < node.cost and not self.is_collision(new_node.position, node.position):
+                node.parent = new_node
+                node.cost = new_cost
+
+    def extract_path(self, node):
+        path = []
+        while node:
+            path.append(node.position)
+            node = node.parent
+        return path[::-1]
+
+    def plan(self, start, goal):
+        self.nodes = [self.Node(start)]
+        for _ in range(self.max_iter):
+            rand_point = np.array([
+                np.random.uniform(self.x_limits[0], self.x_limits[1]),
+                np.random.uniform(self.y_limits[0], self.y_limits[1])
+            ])
+
+            nearest_node = self.get_nearest_node(rand_point)
+            direction = rand_point - nearest_node.position
+            distance = np.linalg.norm(direction)
+            if distance > self.step_size:
+                direction = direction / distance * self.step_size
+            new_position = nearest_node.position + direction
+
+            if self.is_collision(nearest_node.position, new_position):
+                continue
+
+            new_node = self.Node(new_position)
+            new_node.parent = nearest_node
+            new_node.cost = nearest_node.cost + np.linalg.norm(new_position - nearest_node.position)
+
+            near_nodes = self.get_near_nodes(new_node)
+            for node in near_nodes:
+                potential_cost = node.cost + np.linalg.norm(node.position - new_node.position)
+                if potential_cost < new_node.cost and not self.is_collision(node.position, new_node.position):
+                    new_node.parent = node
+                    new_node.cost = potential_cost
+
+            self.nodes.append(new_node)
+            self.rewire(new_node, near_nodes)
+
+            if np.linalg.norm(new_position - goal) < self.step_size and not self.is_collision(new_position, goal):
+                goal_node = self.Node(goal)
+                goal_node.parent = new_node
+                goal_node.cost = new_node.cost + np.linalg.norm(goal - new_position)
+                return self.extract_path(goal_node)
+
+        return None
+
+    def plan_through_waypoints(self, start, waypoints):
+        full_path = []
+        current_start = start
+
+        for wp in waypoints:
+            path_segment = self.plan(current_start, wp[:2])
+            if path_segment is None:
+                print(f"Failed to reach waypoint {wp[:2]}")
+                return None
+            if full_path:
+                full_path.extend(path_segment[1:])
+            else:
+                full_path.extend(path_segment)
+            current_start = wp[:2]
+
+        return np.array(full_path)
 
 def smooth_path_with_cubic_spline(path, num_points=300):
     """
@@ -195,6 +304,90 @@ def smooth_path_with_cubic_spline(path, num_points=300):
     smoothed_path = np.vstack((x_new, y_new)).T
     return smoothed_path
 
+def bezier_interp(p0, p1, p2, t):
+    """Quadratic Bezier interpolation between p0, p1, p2."""
+    return (1 - t)**2 * p0 + 2 * (1 - t) * t * p1 + t**2 * p2
+
+def smooth_path_with_bezier(waypoints, num_points=300, tightness=0.01):
+    """
+    Smooths a path using piecewise quadratic Bezier curves.
+
+    Args:
+        waypoints (np.ndarray): N x D array of waypoints (2D or 3D).
+        num_points (int): Total number of points in the final smooth path.
+        tightness (float): Controls how far the control point is from the line.
+
+    Returns:
+        np.ndarray: Smoothed path with shape (num_points, D)
+    """
+    waypoints = np.array(waypoints)
+    n_segments = len(waypoints) - 1
+    points_per_segment = num_points // n_segments
+    dim = waypoints.shape[1]
+    
+    smoothed = []
+    
+    for i in range(n_segments):
+        p0 = waypoints[i]
+        p2 = waypoints[i+1]
+        
+        # Direction vector and control point
+        dir_vec = p2 - p0
+        p1 = p0 + tightness * dir_vec  # Control point placed between
+        
+        t_values = np.linspace(0, 1, points_per_segment, endpoint=False)
+        for t in t_values:
+            pt = bezier_interp(p0, p1, p2, t)
+            smoothed.append(pt)
+    
+    smoothed.append(waypoints[-1])  # Add final point
+    return np.array(smoothed)
+
+def get_rrt_path(start, goal, obstacles, gates, time, CTRL_FREQ):
+    """
+    Computes a smooth path using RRT* through gates with obstacle avoidance.
+
+    Args:
+        start (np.ndarray): Starting position (x, y, z).
+        goal (np.ndarray): Goal position (x, y, z).
+        obstacles (list): Existing obstacle positions with z-coordinate.
+        gates (np.ndarray): List of gate positions and yaws.
+        time (float): Desired time duration to complete path.
+        CTRL_FREQ (float): Control frequency to determine number of waypoints.
+
+    Returns:
+        np.ndarray: Smoothed 3D path of shape (N, 3)
+    """
+    obstacles = [o[:3] for o in obstacles]
+    waypoints = augment_waypoints(gates)
+    obs = augment_obstacles(gates)
+    obstacles = np.vstack((obstacles, obs))
+
+    x_min, x_max = -3.5, 3.5
+    y_min, y_max = -3.5, 3.5
+    
+    planner = RRTStarPlanner(
+        obstacles=obstacles,
+        x_limits=(x_min, x_max),
+        y_limits=(y_min, y_max),
+        resolution=0.2,
+        obstacle_radius=0.35,
+        max_iter=5000,
+        step_size=0.05
+    )
+
+    waypoints = np.vstack((start[:2], waypoints[:, :2], goal[:2]))
+    path = planner.plan_through_waypoints(start[:2], waypoints)
+    if path is None:
+        print("RRT* could not find a path.")
+        return None
+
+    waypoint_count = int(np.round(time * CTRL_FREQ))
+    # path = smooth_path_with_cubic_spline(path, num_points=waypoint_count)
+
+    path = np.hstack((path, np.ones((path.shape[0], 1))))  # Add z=1.0
+    return path
+
 def get_path(start, goal, obstacles, gates, time, CTRL_FREQ):
     obstacles = [o[:3] for o in obstacles]
     waypoints = augment_waypoints(gates)
@@ -211,9 +404,9 @@ def get_path(start, goal, obstacles, gates, time, CTRL_FREQ):
     # Smooth the path
     waypoint_count = int(np.round(time * CTRL_FREQ))
     path = smooth_path_with_cubic_spline(path, num_points=waypoint_count)
-    
+    #path = smooth_path_with_bezier(path, num_points=waypoint_count)
     
     # Add 1.0 as z coordinate to the path
     path = np.hstack((path, np.ones((path.shape[0], 1))))
     
-    return path 
+    return path

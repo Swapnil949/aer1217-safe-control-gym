@@ -148,6 +148,7 @@ class Controller():
         END = np.array([-0.5, 2.0, 1.0])
 
         path = ecu.get_path(START, END, self.NOMINAL_OBSTACLES, self.NOMINAL_GATES, FLIGHT_TIME, self.CTRL_FREQ)
+        #path = ecu.get_rrt_path(START, END, self.NOMINAL_OBSTACLES, self.NOMINAL_GATES, FLIGHT_TIME, self.CTRL_FREQ)
         
         self.ref_x = path[:, 0]
         self.ref_y = path[:, 1]
