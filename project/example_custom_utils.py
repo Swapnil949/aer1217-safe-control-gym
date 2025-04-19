@@ -195,7 +195,7 @@ def smooth_path_with_cubic_spline(path, num_points=300):
     smoothed_path = np.vstack((x_new, y_new)).T
     return smoothed_path
 
-def get_path(start, goal, obstacles, gates):
+def get_path(start, goal, obstacles, gates, time, CTRL_FREQ):
     obstacles = [o[:3] for o in obstacles]
     waypoints = augment_waypoints(gates)
     obs = augment_obstacles(gates)
@@ -209,7 +209,8 @@ def get_path(start, goal, obstacles, gates):
         return None
     
     # Smooth the path
-    path = smooth_path_with_cubic_spline(path, num_points=550)
+    waypoint_count = int(np.round(time * CTRL_FREQ))
+    path = smooth_path_with_cubic_spline(path, num_points=waypoint_count)
     
     
     # Add 1.0 as z coordinate to the path
