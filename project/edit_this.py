@@ -125,7 +125,7 @@ class Controller():
        # plot_full_map_and_trajectory_2d(self.NOMINAL_GATES, self.NOMINAL_OBSTACLES, self.waypoints, self.ref_x, self.ref_y)
 
         # Draw the trajectory on PyBullet's GUI.
-        draw_trajectory(initial_info, self.waypoints, self.ref_x, self.ref_y, self.ref_z)
+        # draw_trajectory(initial_info, self.waypoints, self.ref_x, self.ref_y, self.ref_z)
 
 
     def planning(self, use_firmware, initial_info):
@@ -204,7 +204,7 @@ class Controller():
 
         if iteration == 0:
             height = 1
-            duration = 2
+            duration = 3
 
             command_type = Command(2)  # Take-off.
             args = [height, duration]
