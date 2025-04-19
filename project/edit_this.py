@@ -225,14 +225,14 @@ class Controller():
             command_type = Command(6)  # Notify setpoint stop.
             args = []
 
-        elif iteration == (FLIGHT_TIME + 13)*self.CTRL_FREQ:
+        elif iteration == (FLIGHT_TIME + 4)*self.CTRL_FREQ:
             height = 0.
             duration = 3
 
             command_type = Command(3)  # Land.
             args = [height, duration]
 
-        elif iteration == (FLIGHT_TIME + 16)*self.CTRL_FREQ-1:
+        elif iteration == (FLIGHT_TIME + 7)*self.CTRL_FREQ-1:
             command_type = Command(4)  # STOP command to be sent once the trajectory is completed.
             args = []
 
