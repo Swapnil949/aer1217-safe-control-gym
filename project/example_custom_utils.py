@@ -24,29 +24,51 @@ def generateCircle(radius, start_point, num_points):
     return np.column_stack((x, y, z))
 
 
-def augment_waypoints(gates): 
+def augment_waypoints(start, goal, gates): 
     """
-    Based on yaw angle, add waypoint to front and back of each gate
+    Based on yaw angle, add waypoint to front and back of each gate,
+    using direction of approach to order them correctly.
     """
     
     waypoints = []
     dist = 0.25
+
+    prev = start  # previous point to compare approach direction
     
     for i, gate in enumerate(gates):
         x, y, _, _, _, yaw, _ = gate
+        
+        enter_exit_dir_y = yaw != 0  # True if gate is aligned along y (vertical)
+        
         dy = dist * np.cos(yaw)
         dx = dist * np.sin(yaw)
+
+        # Front and back waypoints
+        front = [x + dx, y + dy, yaw]
+        center = [x, y, yaw]
+        back = [x - dx, y - dy, yaw]
+
+        if enter_exit_dir_y:
+            # Gate aligned vertically (along y), so compare x to decide approach
+            if prev[0] < x:
+                # Coming from the left → front is on the left side
+                waypoints.extend([front, center, back])
+            else:
+                # Coming from the right → front is on the right side
+                waypoints.extend([front, center, back])
+        else:
+            # Gate aligned horizontally (along x), so compare y to decide approach
+            if prev[1] < y:
+                # Coming from below → front is below
+                waypoints.extend([back, center, front])
+            else:
+                # Coming from above → front is above
+                waypoints.extend([front, center, back])
         
-        # add waypoint in front of gate
-        waypoints.append([x + dx, y + dy, yaw])
-        
-        # add gate center as waypoint
-        waypoints.append([x, y, yaw])
-        
-        # add waypoint behind gate
-        waypoints.append([x - dx, y - dy, yaw])
-    
+        prev = [x, y]  # Update previous location for next iteration
+
     return np.array(waypoints)
+
 
 def augment_obstacles(gates):
     """
@@ -359,7 +381,7 @@ def get_rrt_path(start, goal, obstacles, gates, time, CTRL_FREQ):
         np.ndarray: Smoothed 3D path of shape (N, 3)
     """
     obstacles = [o[:3] for o in obstacles]
-    waypoints = augment_waypoints(gates)
+    waypoints = augment_waypoints(start, goal, gates)
     obs = augment_obstacles(gates)
     obstacles = np.vstack((obstacles, obs))
 
@@ -390,7 +412,7 @@ def get_rrt_path(start, goal, obstacles, gates, time, CTRL_FREQ):
 
 def get_path(start, goal, obstacles, gates, time, CTRL_FREQ):
     obstacles = [o[:3] for o in obstacles]
-    waypoints = augment_waypoints(gates)
+    waypoints = augment_waypoints(start, goal, gates)
     obs = augment_obstacles(gates)
     obstacles = np.vstack((obstacles, obs))
     planner = AStarPlanner(obstacles, resolution=0.1, obstacle_radius=0.4)
