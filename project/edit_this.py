@@ -50,7 +50,7 @@ except ImportError:
     # PyTest import.
     from . import example_custom_utils as ecu
 
-FLIGHT_TIME = 40.0 # seconds
+FLIGHT_TIME = 45.0 # seconds
 #########################
 # REPLACE THIS (END) ####
 #########################
@@ -146,8 +146,13 @@ class Controller():
 
         START = np.array([-1.0, -3.0, 0])
         END = np.array([-0.5, 2.0, 1.0])
-
-        path = ecu.get_path(START, END, self.NOMINAL_OBSTACLES, self.NOMINAL_GATES, FLIGHT_TIME, self.CTRL_FREQ)
+        
+        # reorder gate array order from (1, 2, 3, 4) to (1, 3, 4, 2, 1, 4)
+        gates = self.NOMINAL_GATES
+        gates = np.array(gates)
+        gates = np.array([gates[0], gates[2], gates[3], gates[1], gates[0], gates[3]])
+        
+        path = ecu.get_path(START, END, self.NOMINAL_OBSTACLES, gates, FLIGHT_TIME, self.CTRL_FREQ)
         #path = ecu.get_rrt_path(START, END, self.NOMINAL_OBSTACLES, self.NOMINAL_GATES, FLIGHT_TIME, self.CTRL_FREQ)
         
         self.ref_x = path[:, 0]
@@ -210,7 +215,7 @@ class Controller():
             args = [height, duration]
 
         # [INSTRUCTIONS] Example code for using cmdFullState interface   
-        elif iteration >= 3*self.CTRL_FREQ and iteration < (3 + FLIGHT_TIME)*self.CTRL_FREQ:
+        elif iteration >= 4*self.CTRL_FREQ and iteration < (4 + FLIGHT_TIME)*self.CTRL_FREQ:
             step = min(iteration-3*self.CTRL_FREQ, len(self.ref_x) -1)
             target_pos = np.array([self.ref_x[step], self.ref_y[step], self.ref_z[step]])
             target_vel = np.zeros(3)
@@ -221,18 +226,18 @@ class Controller():
             command_type = Command(1)  # cmdFullState.
             args = [target_pos, target_vel, target_acc, target_yaw, target_rpy_rates]
 
-        elif iteration == (FLIGHT_TIME + 3)*self.CTRL_FREQ:
+        elif iteration == (FLIGHT_TIME + 4)*self.CTRL_FREQ:
             command_type = Command(6)  # Notify setpoint stop.
             args = []
 
-        elif iteration == (FLIGHT_TIME + 4)*self.CTRL_FREQ:
+        elif iteration == (FLIGHT_TIME + 4)*self.CTRL_FREQ + 1:
             height = 0.
             duration = 3
 
             command_type = Command(3)  # Land.
             args = [height, duration]
 
-        elif iteration == (FLIGHT_TIME + 10)*self.CTRL_FREQ-1:
+        elif iteration == (FLIGHT_TIME + 8)*self.CTRL_FREQ-1:
             command_type = Command(4)  # STOP command to be sent once the trajectory is completed.
             args = []
 
