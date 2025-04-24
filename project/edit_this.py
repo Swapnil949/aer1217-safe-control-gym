@@ -50,7 +50,7 @@ except ImportError:
     # PyTest import.
     from . import example_custom_utils as ecu
 
-FLIGHT_TIME = 45.0 # seconds
+FLIGHT_TIME = 30.0 # seconds
 #########################
 # REPLACE THIS (END) ####
 #########################
@@ -209,13 +209,13 @@ class Controller():
 
         if iteration == 0:
             height = 1
-            duration = 3
+            duration = 2
 
             command_type = Command(2)  # Take-off.
             args = [height, duration]
 
         # [INSTRUCTIONS] Example code for using cmdFullState interface   
-        elif iteration >= 4*self.CTRL_FREQ and iteration < (4 + FLIGHT_TIME)*self.CTRL_FREQ:
+        elif iteration >= 3*self.CTRL_FREQ and iteration < (3 + FLIGHT_TIME)*self.CTRL_FREQ:
             step = min(iteration-3*self.CTRL_FREQ, len(self.ref_x) -1)
             target_pos = np.array([self.ref_x[step], self.ref_y[step], self.ref_z[step]])
             target_vel = np.zeros(3)
@@ -226,19 +226,19 @@ class Controller():
             command_type = Command(1)  # cmdFullState.
             args = [target_pos, target_vel, target_acc, target_yaw, target_rpy_rates]
 
-        elif iteration == (FLIGHT_TIME + 4)*self.CTRL_FREQ:
+        elif iteration == (FLIGHT_TIME + 3)*self.CTRL_FREQ:
             command_type = Command(6)  # Notify setpoint stop.
             args = []
 
-        elif iteration == (FLIGHT_TIME + 4)*self.CTRL_FREQ + 1:
+        elif iteration == (FLIGHT_TIME + 3)*self.CTRL_FREQ + 1:
             height = 0.
             duration = 3
 
             command_type = Command(3)  # Land.
             args = [height, duration]
 
-        elif iteration == (FLIGHT_TIME + 8)*self.CTRL_FREQ-1:
-            command_type = Command(4)  # STOP command to be sent once the trajectory is completed.
+        elif iteration == (FLIGHT_TIME + 6)*self.CTRL_FREQ-1:
+            command_type = Command(4)  # STOPfront command to be sent once the trajectory is completed.
             args = []
 
         else:
