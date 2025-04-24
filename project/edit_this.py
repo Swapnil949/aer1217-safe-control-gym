@@ -50,7 +50,7 @@ except ImportError:
     # PyTest import.
     from . import example_custom_utils as ecu
 
-FLIGHT_TIME = 30.0 # seconds
+FLIGHT_TIME = 35.0 # seconds
 #########################
 # REPLACE THIS (END) ####
 #########################

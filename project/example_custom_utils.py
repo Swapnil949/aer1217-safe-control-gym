@@ -59,7 +59,7 @@ def augment_waypoints(start, goal, gates):
                     waypoints.extend([front, center, back])
                 else:
                     # Special case for the last gate (i=4)
-                    waypoints.extend([back, center, front])
+                    waypoints.extend([front, center, back])
         else:
             # Gate aligned horizontally (along x), so compare y to decide approach
             if prev[1] < y:
@@ -85,10 +85,10 @@ def augment_obstacles(gates):
         x, y, _, _, _, yaw, _ = gate
         
         # calculate the endpoint of the gate edge
-        x1 = x + 0.3 * np.cos(yaw)
-        y1 = y + 0.3 * np.sin(yaw)
-        x2 = x - 0.3 * np.cos(yaw)
-        y2 = y - 0.3 * np.sin(yaw)
+        x1 = x + 0.4 * np.cos(yaw)
+        y1 = y + 0.4 * np.sin(yaw)
+        x2 = x - 0.4 * np.cos(yaw)
+        y2 = y - 0.4 * np.sin(yaw)
         
         # Add points to the obstacle list
         obs.append([x1, y1, 0])
@@ -419,7 +419,7 @@ def get_path(start, goal, obstacles, gates, time, CTRL_FREQ):
     waypoints = augment_waypoints(start, goal, gates)
     obs = augment_obstacles(gates)
     obstacles = np.vstack((obstacles, obs))
-    planner = AStarPlanner(obstacles, resolution=0.1, obstacle_radius=0.3)
+    planner = AStarPlanner(obstacles, resolution=0.1, obstacle_radius=0.4)
     
     waypoints = np.vstack((start[:2], waypoints[:, :2], goal[:2]))
     path = planner.plan_through_waypoints(start[:2], waypoints)
